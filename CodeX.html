@@ -1,0 +1,1705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CodeX — Decipher XML checker</title>
+<style>
+  :root{
+    --bg:#12161D; --panel:#1A2029; --panelAlt:#1F2631; --border:#2A313D; --borderSoft:#232A34;
+    --text:#E7EAF0; --muted:#8891A0; --faint:#5B6472;
+    --accent:#4C8DBF; --error:#E2574C; --errorSoft:#3A2320;
+    --warning:#E3A63E; --warningSoft:#3A3020; --info:#4FB286; --infoSoft:#1F3A32;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    display:flex; flex-direction:column; min-height:100vh;
+  }
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 16px; border-bottom:1px solid var(--border); gap:10px; flex-wrap:wrap;
+  }
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand svg{color:var(--accent); flex-shrink:0;}
+  .brand-name{font-size:15px; font-weight:650;}
+  .brand-sub{font-size:11px; color:var(--muted); margin-top:1px;}
+  .actions{display:flex; gap:8px;}
+  button{
+    font-family:inherit; font-size:13px; cursor:pointer; border-radius:6px;
+    padding:9px 14px; display:flex; align-items:center; gap:6px; border:1px solid var(--border);
+    background:transparent; color:var(--text); transition:background .15s;
+  }
+  button:hover{background:var(--panelAlt);}
+  button.primary{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:500;}
+  button.primary:hover{filter:brightness(1.08);}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  button:disabled:hover{background:transparent;}
+  button.primary:disabled:hover{background:var(--accent);}
+
+  .grid-scroll{flex:1; overflow:hidden; display:flex;}
+  .body-grid{
+    display:grid;
+    grid-template-columns:minmax(0,3fr) minmax(420px,2fr);
+    gap:1px;
+    background:var(--border);
+    flex:1;
+    min-width:0;
+  }
+  @media (max-width:900px){
+    .grid-scroll{overflow:auto;}
+    .body-grid{
+      grid-template-columns:minmax(680px,1fr) minmax(390px,.8fr);
+      min-width:980px;
+    }
+  }
+  @media (max-width:760px){
+    .grid-scroll{overflow-x:visible; display:block;}
+    .body-grid{grid-template-columns:1fr; min-width:0;}
+  }
+  .col{background:var(--bg); display:flex; flex-direction:column; min-height:0; min-width:0;}
+
+  .col-head{padding:10px 16px; font-size:13px; color:var(--muted); display:flex; align-items:center; justify-content:space-between;}
+  .col-head a{color:var(--accent); font-size:12px; text-decoration:underline; cursor:pointer; background:none; border:none;}
+
+  .editor-wrap{position:relative; flex:1; display:flex; min-height:0; background:var(--bg);}
+  .line-highlight{position:absolute; left:0; top:0; width:5px; display:none; pointer-events:none; z-index:2; border-radius:0 2px 2px 0; transition:top .1s ease-out;}
+  .xml-backdrop{
+    position:absolute; inset:0; margin:0; z-index:0; pointer-events:none; overflow:hidden;
+    padding:0 16px 16px; font-size:13px; line-height:20px; white-space:pre; color:var(--text); background:transparent;
+  }
+  .xml-tagname{color:#6FA8DC;}
+  .xml-attrname{color:#C3A6E0;}
+  .xml-attrvalue{color:#9FCB7D;}
+  .xml-punct{color:var(--faint);}
+  .xml-comment{color:var(--faint); font-style:italic;}
+  .xml-cdata{color:#E0956F;}
+  textarea{
+    flex:1; width:100%; background:transparent; color:transparent; caret-color:var(--text); border:none; outline:none;
+    resize:none; padding:0 16px 16px; font-size:13px; line-height:20px; position:relative; z-index:1;
+    white-space:pre; overflow:auto;
+  }
+  textarea::placeholder{color:var(--faint);}
+
+  .audit-panel{display:flex; flex-direction:column; min-height:0;}
+  .checks{
+    padding:10px 14px 12px;
+    border-bottom:1px solid var(--borderSoft);
+    background:var(--panel);
+  }
+  .checks-head{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:10px; margin-bottom:9px;
+  }
+  .checks-title{font-size:12px; color:var(--text); font-weight:600;}
+  .checks-sub{font-size:11px; color:var(--faint);}
+  .check-groups{display:flex; gap:7px; flex-wrap:wrap;}
+  .check-group{
+    border:1px solid var(--border);
+    background:var(--bg);
+    border-radius:7px;
+    overflow:hidden;
+  }
+  .check-group summary{
+    list-style:none; cursor:pointer;
+    padding:7px 9px; font-size:11px; color:var(--muted);
+    user-select:none;
+  }
+  .check-group summary::-webkit-details-marker{display:none;}
+  .check-group summary::after{content:"＋"; margin-left:7px; color:var(--faint);}
+  .check-group[open] summary::after{content:"−";}
+  .check-list{padding:7px 9px 8px; border-top:1px solid var(--borderSoft); min-width:260px;}
+  .rule-row{display:flex; align-items:flex-start; gap:7px; font-size:11px; margin-bottom:7px; cursor:pointer; line-height:1.35;}
+  .rule-row:last-child{margin-bottom:0;}
+  .rule-row input{margin-top:2px; flex-shrink:0;}
+  .rules-note{font-size:10px; color:var(--faint); margin:8px 0 0; line-height:1.45;}
+  .stats{display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:10px 16px; border-bottom:1px solid var(--borderSoft);}
+  .chip{display:flex; align-items:center; gap:6px; padding:6px 10px; border-radius:6px; font-size:13px; flex-shrink:0;}
+  .chip .n{font-weight:600; color:var(--text);}
+  .chip .l{color:var(--muted);}
+  .show-dismissed{font-size:12px; color:var(--accent); background:none; border:none; padding:4px 2px; text-decoration:underline;}
+
+  .results{overflow-y:auto; flex:1; min-height:0;}
+  .empty{padding:28px 16px; font-size:13px; color:var(--muted);}
+  .clear{padding:28px 16px; font-size:13px; display:flex; gap:10px; align-items:flex-start;}
+
+  .result-row{
+    width:100%; text-align:left; padding:12px 64px 12px 16px; position:relative; display:flex; gap:10px; align-items:flex-start;
+    border-bottom:1px solid var(--borderSoft); background:transparent; border-radius:0; cursor:pointer;
+  }
+  .result-row:hover{background:var(--panelAlt);}
+  .result-row .meta{font-size:11px; color:var(--faint); display:flex; gap:8px; flex-wrap:wrap;}
+  .result-row p{margin:3px 0 0; font-size:13px; color:var(--text); line-height:1.4; word-break:break-word;}
+  .result-row code{display:block; font-size:11px; color:var(--muted); margin-top:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .sev-icon{flex-shrink:0; margin-top:2px;}
+  .dismiss-btn{
+    position:absolute; top:10px; right:10px; padding:4px 9px; border:1px solid var(--border);
+    background:transparent; color:var(--muted); font-size:11px; font-family:inherit; line-height:1.2; border-radius:5px;
+  }
+  .dismiss-btn:hover{background:var(--border); color:var(--text);}
+
+
+  .results-head{
+    background:var(--panel);
+    border-bottom:1px solid var(--borderSoft);
+    padding:14px 16px 12px;
+  }
+  .results-title-row{
+    display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+  }
+  .results-title{font-size:14px; font-weight:650; color:var(--text);}
+  .results-sub{font-size:11px; color:var(--faint); margin-top:3px;}
+  .results-tools{display:flex; align-items:center; gap:8px;}
+
+  .export-btn{
+    border:1px solid var(--border); background:var(--bg); color:var(--muted);
+    border-radius:6px; padding:6px 9px; font:inherit; font-size:11px; cursor:pointer;
+    white-space:nowrap;
+  }
+  .export-btn:hover{background:var(--panelAlt); color:var(--text); border-color:var(--accent);}
+  .export-btn:disabled{opacity:.45; cursor:not-allowed;}
+
+  .sort-wrap{
+    display:flex; align-items:center; gap:6px; color:var(--faint); font-size:11px;
+  }
+  .sort-wrap select{
+    appearance:none; -webkit-appearance:none;
+    background:var(--bg); color:var(--muted); border:1px solid var(--border);
+    border-radius:6px; padding:6px 26px 6px 8px; font:inherit; cursor:pointer;
+  }
+
+  .summary-cards{
+    display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px; margin-top:12px;
+  }
+  .summary-card{
+    min-width:0; padding:9px 10px; border:1px solid var(--border);
+    background:var(--bg); border-radius:7px; display:flex; flex-direction:column; gap:2px;
+  }
+  .summary-card .summary-number{font-size:18px; line-height:1; font-weight:700;}
+  .summary-card .summary-label{font-size:10px; color:var(--muted);}
+  .summary-card:nth-child(1) .summary-number{color:var(--error);}
+  .summary-card:nth-child(2) .summary-number{color:var(--warning);}
+  .summary-card:nth-child(3) .summary-number{color:var(--info);}
+  .summary-card.total .summary-number{color:var(--text);}
+
+  .filter-bar{
+    display:flex; gap:6px; flex-wrap:wrap; margin-top:10px;
+  }
+  .filter-pill{
+    padding:5px 9px; border:1px solid var(--border); background:var(--bg);
+    color:var(--muted); border-radius:999px; font-size:11px; line-height:1.2;
+  }
+  .filter-pill:hover{background:var(--panelAlt);}
+  .filter-pill.active{border-color:var(--accent); color:var(--text); background:var(--panelAlt);}
+  .filter-pill span{
+    display:inline-flex; min-width:16px; justify-content:center; margin-left:3px;
+    color:var(--faint); font-weight:650;
+  }
+
+  .group-summary{margin-top:11px; padding-top:10px; border-top:1px solid var(--borderSoft);}
+  .group-summary-title{
+    font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--faint);
+    margin-bottom:7px;
+  }
+  .group-counts{display:flex; gap:6px; flex-wrap:wrap;}
+  .group-pill{
+    display:flex; align-items:center; gap:6px; padding:5px 8px; border:1px solid var(--border);
+    background:var(--bg); border-radius:6px; font-size:10px; color:var(--muted);
+  }
+  .group-pill strong{font-size:11px; color:var(--text);}
+
+  .results{overflow-y:auto; flex:1; min-height:0;}
+  .empty{padding:28px 16px; font-size:13px; color:var(--muted);}
+  .clear{padding:28px 16px; font-size:13px; display:flex; gap:10px; align-items:flex-start;}
+
+  @media (max-width:520px){
+    .summary-cards{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .results-title-row{align-items:center;}
+    .results-tools{margin-left:auto;}
+  }
+
+  input[type=file]{display:none;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+    <div>
+      <div class="brand-name mono">CodeX</div>
+      <div class="brand-sub">Focused audit checks for team rules, multilingual setup, and Forsta practices</div>
+    </div>
+  </div>
+  <div class="actions">
+    <input type="file" id="fileInput" accept=".xml,.txt" />
+    <button id="uploadBtn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Upload file
+    </button>
+    <button id="runBtn" class="primary" disabled>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      Run check
+    </button>
+  </div>
+</header>
+
+<div class="grid-scroll">
+<div class="body-grid">
+  <div class="col">
+    <div class="col-head">
+      <span>Decipher XML</span>
+      <button id="sampleBtn" style="border:none;padding:0;">Load sample</button>
+    </div>
+    <div class="editor-wrap">
+      <div id="lineHighlight" class="line-highlight"></div>
+      <pre id="xmlBackdrop" class="xml-backdrop mono" aria-hidden="true"></pre>
+      <textarea id="xmlInput" class="mono" spellcheck="false" wrap="off" placeholder="Paste your Decipher XML here…"></textarea>
+    </div>
+  </div>
+
+  <div class="col audit-panel">
+    <div class="checks">
+      <div class="checks-head">
+        <div>
+          <div class="checks-title">Checks</div>
+          <div class="checks-sub">Choose which audit groups to run</div>
+        </div>
+      </div>
+      <div class="check-groups">
+        <details class="check-group">
+          <summary>Your team's rules</summary>
+          <div id="rulesClient" class="check-list"></div>
+        </details>
+        <details class="check-group">
+          <summary>Multi-language</summary>
+          <div id="rulesMls" class="check-list"></div>
+        </details>
+        <details class="check-group">
+          <summary>Forsta</summary>
+          <div id="rulesForsta" class="check-list"></div>
+        </details>
+      </div>
+    </div>
+    <div class="results-head">
+      <div class="results-title-row">
+        <div>
+          <div class="results-title">Audit Results</div>
+          <div class="results-sub" id="resultsSub">Run the audit to see issues here</div>
+        </div>
+        <div class="results-tools">
+          <button id="downloadExcelBtn" class="export-btn" disabled title="Download the current audit report as an Excel workbook">↓ Excel</button>
+          <label class="sort-wrap">
+            <span>Sort</span>
+            <select id="sortSelect">
+              <option value="line">Line</option>
+              <option value="severity">Severity</option>
+              <option value="rule">Rule</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div id="summaryCards" class="summary-cards">
+        <div class="summary-card"><span class="summary-number">—</span><span class="summary-label">Errors</span></div>
+        <div class="summary-card"><span class="summary-number">—</span><span class="summary-label">Warnings</span></div>
+        <div class="summary-card"><span class="summary-number">—</span><span class="summary-label">Info</span></div>
+        <div class="summary-card total"><span class="summary-number">—</span><span class="summary-label">Total issues</span></div>
+      </div>
+
+      <div id="filterBar" class="filter-bar">
+        <button class="filter-pill active" data-filter="all">All <span>0</span></button>
+        <button class="filter-pill" data-filter="error">Errors <span>0</span></button>
+        <button class="filter-pill" data-filter="warning">Warnings <span>0</span></button>
+        <button class="filter-pill" data-filter="info">Info <span>0</span></button>
+      </div>
+
+      <div class="group-summary">
+        <div class="group-summary-title">Rule Groups</div>
+        <div id="groupCounts" class="group-counts"></div>
+      </div>
+    </div>
+
+    <div id="statsBar" class="stats" style="display:none;"></div>
+    <div id="results" class="results">
+      <div class="empty">Paste or upload your XML, choose the checks you want, then run the audit.</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+const QUESTION_TAGS = new Set(["radio","checkbox","select","text","textarea","number","float","rank","grid","date","signature","multitextarea"]);
+
+const RULES = [
+  // structure
+  { id:"wellformed", cat:"structure", label:"Mismatched or unclosed tags" },
+  { id:"missingLabel", cat:"structure", label:"Question missing a label" },
+  { id:"missingValue", cat:"structure", label:"Row or col missing a value" },
+  { id:"dupLabel", cat:"structure", label:"Duplicate label reused" },
+  { id:"dupValue", cat:"structure", label:"Duplicate value in one question" },
+  // scripting conventions
+  { id:"namingConvention", cat:"practice", label:"Label naming convention" },
+  { id:"missingTitle", cat:"practice", label:"Question missing visible title" },
+  { id:"emptyOption", cat:"practice", label:"Row or col with no display text" },
+  { id:"execEscaping", cat:"practice", label:"exec block not CDATA-wrapped" },
+  { id:"debugLeftovers", cat:"practice", label:"Debug statements left in exec" },
+  { id:"inlineStyle", cat:"practice", label:"Inline style attribute" },
+  { id:"noSuspend", cat:"practice", label:"No suspend checkpoint" },
+  // client rules (from Code_Checker_AI_Rules.docx + inline instructions)
+  { id:"dfl01", cat:"client", label:"DFL-01: Reusable answer lists" },
+  { id:"hid01", cat:"client", label:"HID-01: Execute question missing translateable=\"0\"" },
+  { id:"hid02", cat:"client", label:"HID-02: Hidden question label should start with \"h\"" },
+  { id:"hid03", cat:"client", label:'HID-03: Hidden question missing noTranslate="comment,title"' },
+  { id:"trn01", cat:"client", label:'TRN-01: Normal question missing noTranslate="comment"' },
+  { id:"trn02", cat:"client", label:"TRN-02: Normal question wrongly marks title as noTranslate" },
+  { id:"openLabelConvention", cat:"client", label:'Open-text row should be labeled "r98" (rows only)' },
+  { id:"exclusiveNoneLabel", cat:"client", label:'Exclusive "None" row should be labeled "r99" (rows only)' },
+  { id:"exclusivePnaLabel", cat:"client", label:'Exclusive "Prefer not to answer" row should be labeled "r97" (rows only)' },
+  { id:"realAnswerMissing", cat:"client", label:"Real Answer attribute missing on open-end text" },
+  { id:"py01", cat:"client", label:"PY-01: Sequential if statements for exclusive logic" },
+  { id:"py02", cat:"client", label:"PY-02: Long if/elif chain instead of dict lookup" },
+  { id:"py03", cat:"client", label:"PY-03: Search loop missing break" },
+  { id:"py04", cat:"client", label:"PY-04: Loop building a list instead of comprehension" },
+  { id:"py05", cat:"client", label:"PY-05: Repeated Python logic across exec blocks" },
+  { id:"py06", cat:"client", label:"PY-06: Function not defined in exec when=\"init\"" },
+  // multi-language best practices
+  { id:"mls01", cat:"mls", label:"Piping mid-sentence instead of a full phrase" },
+  { id:"mls02", cat:"mls", label:"Hardcoded error text instead of <res>" },
+  { id:"mls03", cat:"mls", label:"Hardcoded currency symbol instead of <res>" },
+  // general Forsta best practices
+  { id:"blockCondReuse", cat:"forsta", label:"Repeated cond on sibling elements instead of a <block>" },
+  { id:"randomizationConsistency", cat:"forsta", label:"Filtered question missing shuffleBy to match its source" },
+  { id:"rowCondShorthand", cat:"forsta", label:'Per-row cond instead of rowCond="Source[row]"' },
+  { id:"colCondShorthand", cat:"forsta", label:'Per-col cond instead of colCond="Source[col]"' },
+];
+
+// CodeX focuses on project/team, multilingual, and Forsta checks.
+// General structure and scripting-convention checks are intentionally hidden.
+const ACTIVE_CATS = new Set(["client","mls","forsta"]);
+const ACTIVE_RULES = RULES.filter(r => ACTIVE_CATS.has(r.cat));
+
+const SAMPLE = `<block label="Q1_block">
+
+<radio label="Q1" title="How satisfied are you with our service?">
+<row value="1">Very satisfied</row>
+<row value="2">Satisfied</row>
+<row value="2">Neutral</row>
+<row value="3"></row>
+</radio>
+
+<checkbox>
+<row value="1">Email</row>
+<row>Phone</row>
+</checkbox>
+
+<radio label="Q1" title="Which region are you in?">
+<row value="1">North</row>
+<row value="2" style="color:red">South</row>
+</radio>
+
+<exec>
+if (values.Q1 < 3) {
+  console.log("low score", values.Q1);
+}
+</exec>
+
+</block>
+
+<!-- HID-01 / HID-02 / HID-03 demo: execute-only element -->
+<checkbox label="hDemo" atleast="1" where="execute,survey,report" title="Please select one:">
+<exec>
+Q10.r2.open = "Description"
+</exec>
+<row label="r1">Item 1</row>
+<row label="r2" open="1" openSize="25">Item 2</row>
+<row label="r3" open="1">Item 3</row>
+<row label="r4" exclusive="1">None</row>
+<row label="r5" exclusive="1">Prefer not to answer</row>
+</checkbox>
+<suspend/>
+
+<!-- open / exclusive row-label convention demo -->
+<checkbox label="Q10" atleast="1" title="Please select one:">
+<row label="r1">Item 1</row>
+<row label="r2" open="1" openSize="25">Item 2</row>
+<row label="r3" open="1">Item 3</row>
+<row label="r4" exclusive="1">None</row>
+<row label="r5" exclusive="1">Prefer not to answer</row>
+</checkbox>
+<suspend/>
+
+<!-- radio value/col demo: good case, values on rows -->
+<radio label="q1_dup">
+<title>Which brands have you heard of?</title>
+<row label="r1" value="1">Brand 1</row>
+<row label="r2" value="2">Brand 2</row>
+<row label="r3" value="3">Brand 3</row>
+<row label="r4" value="4">Brand 4</row>
+</radio>
+
+<!-- radio value/col demo: rows + cols, values belong on cols -->
+<radio label="q1_dup">
+<title>Which brands have you heard of?</title>
+<row label="r1">Brand 1</row>
+<row label="r2">Brand 2</row>
+<row label="r3">Brand 3</row>
+<row label="r4">Brand 4</row>
+<col label="c1" value="1">Brand 3</col>
+<col label="c2" value="2">Brand 4</col>
+</radio>
+
+<!-- HID-03 / TRN-01 demo: hidden question with correct noTranslate -->
+<radio label="hidq1_dup" noTranslate="comment,title" where="execute,survey,report">
+<title>Which brands have you heard of?</title>
+<comment>Select One</comment>
+<row label="r1">Brand 1</row>
+<row label="r2">Brand 2</row>
+<row label="r3">Brand 3</row>
+<row label="r4">Brand 4</row>
+<col label="c1">Brand 3</col>
+<col label="c2">Brand 4</col>
+</radio>
+
+<!-- PY-01 demo: sequential ifs on the same variable -->
+<exec>
+if co == "uk":
+    qCountry.val = qCountry.r1.index
+if co == "us":
+    qCountry.val = qCountry.r2.index
+if co == "de":
+    qCountry.val = qCountry.r3.index
+</exec>
+
+<!-- PY-02 demo: long if/elif chain mapping values -->
+<exec>
+if co == "uk":
+    qCountry.val = qCountry.r1.index
+elif co == "us":
+    qCountry.val = qCountry.r2.index
+elif co == "de":
+    qCountry.val = qCountry.r3.index
+elif co == "fr":
+    qCountry.val = qCountry.r4.index
+elif co == "it":
+    qCountry.val = qCountry.r5.index
+</exec>
+
+<!-- PY-03 demo: search loop with no break -->
+<exec>
+for eachRow in q1.rows:
+    if eachRow.label == "r1":
+        eachRow.val = 1
+</exec>
+
+<!-- PY-04 demo: loop only used to build a list -->
+<exec>
+brandRows = []
+for row in q1.rows:
+    if row.label.startswith("r"):
+        brandRows.append(row.index)
+</exec>
+
+<!-- PY-05 demo: identical logic repeated across exec blocks -->
+<exec>
+for eachRow in q1.rows:
+    eachRow.val = None
+</exec>
+
+<exec>
+for eachRow in q2.rows:
+    eachRow.val = None
+</exec>
+
+<exec>
+for eachRow in q3.rows:
+    eachRow.val = None
+</exec>
+
+<!-- PY-06 demo: function defined outside exec when="init" -->
+<exec>
+def clearSelection(qID):
+    for eachRow in qID.rows:
+        eachRow.val = None
+</exec>
+
+<!-- MLS-01 demo: piping mid-sentence -->
+<textarea label="Q11" optional="0">
+<title>Would you buy a [pipe: color] car?</title>
+</textarea>
+
+<!-- MLS-02 demo: hardcoded error text -->
+<number label="Q12" size="2" optional="0">
+<title>How many months in a year have 28 days?</title>
+<validate>
+if Q12.ival gt 12:
+    error("Please enter a number less than 12.")
+</validate>
+</number>
+
+<!-- MLS-03 demo: hardcoded currency symbol -->
+<radio label="Q13" noTranslate="comment">
+<title>Please choose an amount</title>
+<row label="r1" ss:preText="$">Option A</row>
+</radio>
+
+<!-- Forsta block-tag demo: repeated cond instead of a <block> -->
+<radio label="Q20" cond="Q1.r1">
+<title>Question for males, part 1</title>
+<row label="r1">Yes</row>
+<row label="r2">No</row>
+</radio>
+
+<radio label="Q21" cond="Q1.r1">
+<title>Question for males, part 2</title>
+<row label="r1">Yes</row>
+<row label="r2">No</row>
+</radio>
+
+<!-- Forsta randomization-consistency demo -->
+<checkbox label="Q30" shuffle="rows">
+<title>Which of these brands have you heard of?</title>
+<row label="r1">Brand A</row>
+<row label="r2">Brand B</row>
+<row label="r3">Brand C</row>
+</checkbox>
+<suspend/>
+
+<checkbox label="Q31" rowCond="Q30[row]">
+<title>Which of these brands have you purchased?</title>
+<row label="r1">Brand A</row>
+<row label="r2">Brand B</row>
+<row label="r3">Brand C</row>
+</checkbox>
+<suspend/>
+
+<!-- Forsta rowCond-shorthand demo: per-row cond instead of rowCond="Q30[row]" -->
+<checkbox label="Q32">
+<title>Which of these brands would you recommend?</title>
+<row label="r1" cond="Q30.r1">Brand A</row>
+<row label="r2" cond="Q30.r2">Brand B</row>
+<row label="r3" cond="Q30.r3">Brand C</row>
+</checkbox>
+<suspend/>
+
+<!-- Forsta col-axis demos: same rules for cols -->
+<grid label="Q33" shuffle="cols">
+<title>Rate each brand on these attributes</title>
+<row label="r1" value="1">Quality</row>
+<row label="r2" value="2">Value</row>
+<col label="c1" value="1">Brand A</col>
+<col label="c2" value="2">Brand B</col>
+<col label="c3" value="3">Brand C</col>
+</grid>
+<suspend/>
+
+<grid label="Q34" colCond="Q33[col]">
+<title>Which of these brands would you buy again?</title>
+<row label="r1" value="1">Yes</row>
+<col label="c1" value="1">Brand A</col>
+<col label="c2" value="2">Brand B</col>
+<col label="c3" value="3">Brand C</col>
+</grid>
+<suspend/>
+
+<grid label="Q35">
+<title>Rank these brands</title>
+<row label="r1" value="1">Rank</row>
+<col label="c1" value="1" cond="Q33.c1">Brand A</col>
+<col label="c2" value="2" cond="Q33.c2">Brand B</col>
+<col label="c3" value="3" cond="Q33.c3">Brand C</col>
+</grid>
+<suspend/>
+
+<!-- Real Answer demo: brand-type OE question missing attribute -->
+<text label="Q40" optional="0">
+<title>Which brand of non-chocolate candy do you prefer?</title>
+</text>
+
+<!-- Real Answer demo: brand phrase with plural "brands" -->
+<text label="Q45" optional="0">
+<title>Which brand of car do you currently drive? Please select from the brands below if none match.</title>
+</text>
+
+<!-- Real Answer demo: excluded-type OE question missing attribute (postal code) -->
+<text label="Q41" optional="0">
+<title>What is your postal code?</title>
+</text>
+
+<!-- Real Answer demo: excluded-type OE question missing attribute (captcha-style) -->
+<text label="Q44" optional="0">
+<title>To verify you are human, please enter the code you see below.</title>
+</text>
+
+<!-- Real Answer demo: other-specify row missing attribute -->
+<checkbox label="Q42">
+<title>Which brands have you purchased?</title>
+<row label="r1">Brand A</row>
+<row label="r2">Brand B</row>
+<row label="r3" open="1">Other, please specify</row>
+</checkbox>
+<suspend/>
+
+<!-- Real Answer demo: correctly tagged, should not flag -->
+<text label="Q43" ss:questionClassNames="IsBrandQuestion" optional="0">
+<title>Who is your current mobile phone provider?</title>
+</text>
+`;
+
+const SEVERITY_META = {
+  error:   { color:"var(--error)",   soft:"var(--errorSoft)",   label:"Error",
+             icon:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>' },
+  warning: { color:"var(--warning)", soft:"var(--warningSoft)", label:"Warning",
+             icon:'<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>' },
+  info:    { color:"var(--info)",    soft:"var(--infoSoft)",    label:"Note",
+             icon:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>' },
+};
+
+function icon(name, color, size){
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="sev-icon">${SEVERITY_META[name].icon}</svg>`;
+}
+
+function buildLineOffsets(text){
+  const offsets=[0];
+  for(let i=0;i<text.length;i++){ if(text.charCodeAt(i)===10) offsets.push(i+1); }
+  return offsets;
+}
+function lineForIndex(offsets, idx){
+  let lo=0, hi=offsets.length-1, ans=0;
+  while(lo<=hi){ const mid=(lo+hi)>>1; if(offsets[mid]<=idx){ans=mid; lo=mid+1;} else hi=mid-1; }
+  return ans+1;
+}
+function stripTags(s){ return s.replace(/<[^>]*>/g," "); }
+
+function escapeHtml(s){
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function highlightTag(tagText){
+  const m = /^<(\/?)([A-Za-z_][\w.\-:]*)([\s\S]*?)(\/?)>$/.exec(tagText);
+  if (!m) return `<span class="xml-punct">${escapeHtml(tagText)}</span>`;
+  const [, slash, name, attrsRaw, selfSlash] = m;
+  let html = `<span class="xml-punct">&lt;${slash}</span><span class="xml-tagname">${escapeHtml(name)}</span>`;
+  const attrRe = /([\w:-]+)(\s*=\s*)("[^"]*"|'[^']*')/g;
+  let lastEnd = 0, am;
+  while ((am = attrRe.exec(attrsRaw))) {
+    html += escapeHtml(attrsRaw.slice(lastEnd, am.index));
+    html += `<span class="xml-attrname">${escapeHtml(am[1])}</span><span class="xml-punct">${escapeHtml(am[2])}</span><span class="xml-attrvalue">${escapeHtml(am[3])}</span>`;
+    lastEnd = am.index + am[0].length;
+  }
+  html += escapeHtml(attrsRaw.slice(lastEnd));
+  html += `<span class="xml-punct">${selfSlash}&gt;</span>`;
+  return html;
+}
+
+function highlightXml(text){
+  let out = "";
+  let lastIndex = 0;
+  const re = /(<!--[\s\S]*?-->)|(<!\[CDATA\[[\s\S]*?\]\]>)|(<\/?[A-Za-z_][^>]*>)/g;
+  let m;
+  while ((m = re.exec(text))) {
+    if (m.index > lastIndex) out += escapeHtml(text.slice(lastIndex, m.index));
+    if (m[1]) out += `<span class="xml-comment">${escapeHtml(m[1])}</span>`;
+    else if (m[2]) out += `<span class="xml-cdata">${escapeHtml(m[2])}</span>`;
+    else if (m[3]) out += highlightTag(m[3]);
+    lastIndex = re.lastIndex;
+  }
+  out += escapeHtml(text.slice(lastIndex));
+  return out;
+}
+
+function maskRegions(text, regex){ return text.replace(regex, m=>m.replace(/[^\n]/g," ")); }
+function leadingLen(line){ const m=line.match(/^[ \t]*/); return m?m[0].length:0; }
+
+function hasRealAnswerToken(str){
+  return !!str && /isbrandquestion|isexcluded|qsralsbrandquestion|qsralsexcluded|engagedlength/i.test(str);
+}
+const BRAND_HINT_RE = /\b(brands?|products?|companies|company|providers?|platforms?|wallets?|manufacturers?|retailers?|stores?|apps?|websites?|payroll|cryptocurrenc(?:y|ies)|stablecoins?|models?)\b/i;
+const EXCLUDED_HINT_RE = /\b(zip\s*codes?|postal\s*codes?|captchas?|verify you are human|codes? you see below|e-?mails?|addresses?|contact\s*info|phones?|honorari\w*|your\s*names?)\b/i;
+
+let idCounter = 0;
+
+function runChecks(rawText){
+  const results = [];
+  const push = (rule, severity, line, message) => { results.push({ id:++idCounter, rule, severity, line, message }); };
+
+  const linesArr = rawText.split("\n");
+  const snippetOf = (line) => (linesArr[line-1] || "").trim().slice(0,140);
+  const offsets = buildLineOffsets(rawText);
+
+  // labels referenced via [pipe: label] anywhere in the script — used as an HID-01 exception
+  const pipedLabels = new Set();
+  {
+    const pipeScanRe = /\[pipe:\s*([A-Za-z_]\w*)/gi;
+    let pm;
+    while ((pm = pipeScanRe.exec(rawText))) pipedLabels.add(pm[1].toLowerCase());
+  }
+
+  // mask comments, CDATA, and exec/validate bodies so they don't confuse the tag scanner
+  let masked = rawText;
+  masked = maskRegions(masked, /<!--[\s\S]*?-->/g);
+  masked = maskRegions(masked, /<!\[CDATA\[[\s\S]*?\]\]>/g);
+  masked = masked.replace(/(<exec\b[^>]*>)([\s\S]*?)(<\/exec>)/gi, (m,o,b,c)=> o + b.replace(/[^\n]/g," ") + c);
+  masked = masked.replace(/(<validate\b[^>]*>)([\s\S]*?)(<\/validate>)/gi, (m,o,b,c)=> o + b.replace(/[^\n]/g," ") + c);
+
+  const labelMap = new Map();
+  const checkLabel = (label, line) => {
+    if (labelMap.has(label)) labelMap.get(label).push(line); else labelMap.set(label,[line]);
+    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(label)) {
+      push("namingConvention","warning",line,`Label "${label}" should start with a letter and use only letters, numbers, and underscores.`);
+    } else if (label.length > 40) {
+      push("namingConvention","warning",line,`Label "${label}" is ${label.length} characters — consider shortening it.`);
+    }
+  };
+
+  const findEnclosingQuestion = (stack) => {
+    for (let i=stack.length-1;i>=0;i--) if (stack[i].isQuestion) return stack[i];
+    return null;
+  };
+
+  const questionsForDFL = [];
+  const allQuestionsMeta = [];
+
+  const finalizeFrame = (frame, stackNow) => {
+    if (frame.isQuestion) {
+      if (!frame.sawTitle) push("missingTitle","warning",frame.line,`<${frame.name} label="${frame.labelAttr||"?"}"> has no visible title.`);
+      [["row",frame.valueMap],["col",frame.colValueMap]].forEach(([axis,vm]) => {
+        Object.entries(vm).forEach(([v,ls]) => {
+          if (ls.length>1) push("dupValue","error",ls[0],`Value "${v}" is reused by ${ls.length} <${axis}> elements inside <${frame.name} label="${frame.labelAttr||"?"}"> (lines ${ls.join(", ")}).`);
+        });
+      });
+      if (frame.rowTexts.size > 0) {
+        questionsForDFL.push({ label: frame.labelAttr, line: frame.line, hasInsert: frame.hasInsert, rowTexts: frame.rowTexts });
+      }
+      if (frame.name === "radio") {
+        if (frame.hasCols) {
+          frame.missingValueCols.forEach(ln => push("missingValue","error",ln,`<col> has no value attribute — in a row/col grid, values belong on the columns, not the rows.`));
+        } else {
+          frame.missingValueRows.forEach(ln => push("missingValue","error",ln,`<row> has no value attribute.`));
+        }
+      }
+      if (!frame.attrs.rowcond && frame.rowCondEntries.length >= 2 && frame.rowCondEntries.length === frame.totalRowCount) {
+        const parsed = frame.rowCondEntries.map(e => /^([A-Za-z_]\w*)\.(\w+)$/.exec(e.cond));
+        if (parsed.every(p => p)) {
+          const sourceLabels = new Set(parsed.map(p => p[1]));
+          if (sourceLabels.size === 1) {
+            const source = [...sourceLabels][0];
+            push("rowCondShorthand","warning",frame.rowCondEntries[0].line,`Every row in <${frame.name} label="${frame.labelAttr||"?"}"> has its own cond referencing "${source}" — since the rows match one-to-one, use rowCond="${source}[row]" on the question instead of a per-row cond.`);
+          }
+        }
+      }
+      if (!frame.attrs.colcond && frame.colCondEntries.length >= 2 && frame.colCondEntries.length === frame.totalColCount) {
+        const parsed = frame.colCondEntries.map(e => /^([A-Za-z_]\w*)\.(\w+)$/.exec(e.cond));
+        if (parsed.every(p => p)) {
+          const sourceLabels = new Set(parsed.map(p => p[1]));
+          if (sourceLabels.size === 1) {
+            const source = [...sourceLabels][0];
+            push("colCondShorthand","warning",frame.colCondEntries[0].line,`Every col in <${frame.name} label="${frame.labelAttr||"?"}"> has its own cond referencing "${source}" — since the cols match one-to-one, use colCond="${source}[col]" on the question instead of a per-col cond.`);
+          }
+        }
+      }
+      if (frame.name === "text" || frame.name === "textarea") {
+        if (!hasRealAnswerToken(frame.attrs["ss:questionclassnames"])) {
+          const t = frame.titleText || "";
+          if (BRAND_HINT_RE.test(t)) {
+            push("realAnswerMissing","warning",frame.line,`<${frame.name} label="${frame.labelAttr||"?"}"> looks like it's asking for a brand/product/company name but has no Real Answer attribute — add ss:questionClassNames="IsBrandQuestion" so it isn't scored as low quality.`);
+          } else if (EXCLUDED_HINT_RE.test(t)) {
+            push("realAnswerMissing","warning",frame.line,`<${frame.name} label="${frame.labelAttr||"?"}"> looks like it's asking for a non-dictionary value (postal code, captcha, email, contact info, etc.) but has no Real Answer attribute — add ss:questionClassNames="IsExcluded" so it isn't scored as low quality.`);
+          } else {
+            push("realAnswerMissing","info",frame.line,`<${frame.name} label="${frame.labelAttr||"?"}"> is an open-end question with no Real Answer attribute set — review whether it needs ss:questionClassNames="IsBrandQuestion" or "IsExcluded".`);
+          }
+        }
+      }
+    }
+
+    if (frame.name==="row" || frame.name==="col" || frame.name==="title") {
+      const text = stripTags(frame.immediateText).trim();
+      if (!text) {
+        push("emptyOption","warning",frame.line,`<${frame.name}> at line ${frame.line} has no display text.`);
+      } else if (frame.name==="row" || frame.name==="col") {
+        const owner = findEnclosingQuestion(stackNow);
+        if (owner) owner.rowTexts.add(text.toLowerCase());
+      }
+
+      if (frame.name==="row" || frame.name==="col") {
+        const label = frame.labelAttr;
+        const isOpen = frame.attrs.open === "1";
+        if (frame.name==="row") {
+          if (isOpen && label !== "r98") {
+            push("openLabelConvention","warning",frame.line,`<row label="${label||"?"}"> has open="1" but its label isn't "r98".`);
+          }
+          if (frame.attrs.exclusive === "1") {
+            const lower = text.toLowerCase();
+            if (/^none\b/.test(lower)) {
+              if (label !== "r99") push("exclusiveNoneLabel","warning",frame.line,`<row label="${label||"?"}"> looks like a "None" option but its label isn't "r99".`);
+            } else if (/prefer not to answer/.test(lower)) {
+              if (label !== "r97") push("exclusivePnaLabel","warning",frame.line,`<row label="${label||"?"}"> looks like a "Prefer not to answer" option but its label isn't "r97".`);
+            }
+          }
+        }
+
+        if (frame.attrs.open === "1") {
+          const owner2 = findEnclosingQuestion(stackNow);
+          const ownClass = frame.name==="row" ? frame.attrs["ss:rowclassnames"] : frame.attrs["ss:colclassnames"];
+          const qClass = owner2 ? owner2.attrs["ss:questionclassnames"] : undefined;
+          if (!hasRealAnswerToken(ownClass) && !hasRealAnswerToken(qClass)) {
+            const t = (owner2 && owner2.titleText) || "";
+            const attrName = frame.name==="row" ? "ss:rowClassNames" : "ss:colClassNames";
+            if (BRAND_HINT_RE.test(t)) {
+              push("realAnswerMissing","warning",frame.line,`<${frame.name} label="${label||"?"}"> is an open text box (open="1") with no Real Answer attribute — the question looks like it's asking about brands/products, so add ${attrName}="IsBrandQuestion".`);
+            } else if (EXCLUDED_HINT_RE.test(t)) {
+              push("realAnswerMissing","warning",frame.line,`<${frame.name} label="${label||"?"}"> is an open text box (open="1") with no Real Answer attribute — the question looks like it's asking for a non-dictionary value (postal code, captcha, email, contact info, etc.), so add ${attrName}="IsExcluded".`);
+            } else {
+              push("realAnswerMissing","info",frame.line,`<${frame.name} label="${label||"?"}"> is an open text box (open="1") with no Real Answer attribute — review whether it needs ${attrName}="IsBrandQuestion" or "IsExcluded".`);
+            }
+          }
+        }
+      }
+
+      if (frame.name==="title") {
+        const owner3 = findEnclosingQuestion(stackNow);
+        if (owner3) owner3.titleText = text;
+        if (/(\S+\s+)\[pipe:[^\]]*\](\s+\S+)/.test(frame.immediateText)) {
+          push("mls01","warning",frame.line,`Title pipes into the middle of a sentence — pipe the complete phrase instead so translations stay grammatically correct.`);
+        }
+      }
+    }
+  };
+
+  let suspendFound = false;
+  const stack = [];
+  const rootFrame = {};
+  const tagRe = /<(\/)?([A-Za-z_][\w.\-:]*)((?:"[^"]*"|'[^']*'|[^"'>])*?)(\/)?>/g;
+  let prevEnd = 0, m;
+
+  while ((m = tagRe.exec(masked))) {
+    const full = m[0], closingSlash = m[1], rawName = m[2], attrStr = m[3], selfClose = m[4];
+    const name = rawName.toLowerCase();
+    const idx = m.index;
+    const line = lineForIndex(offsets, idx);
+    const textBefore = masked.slice(prevEnd, idx);
+    if (stack.length) stack[stack.length-1].immediateText += textBefore;
+    prevEnd = idx + full.length;
+
+    const attrs = {};
+    const attrRe = /([\w:-]+)\s*=\s*"([^"]*)"|([\w:-]+)\s*=\s*'([^']*)'/g;
+    let am;
+    while ((am = attrRe.exec(attrStr))) {
+      const k = (am[1]||am[3]).toLowerCase();
+      const v = am[2]!==undefined ? am[2] : am[4];
+      attrs[k]=v;
+    }
+
+    if (name==="suspend") suspendFound = true;
+    if (attrs.style !== undefined) push("inlineStyle","info",line,`<${name}> uses an inline style attribute; a CSS class is easier to maintain across a script.`);
+
+    if (attrs["ss:pretext"] !== undefined || attrs["ss:posttext"] !== undefined) {
+      ["ss:pretext","ss:posttext"].forEach((k) => {
+        const val = attrs[k];
+        if (val !== undefined && /[$€£¥]/.test(val) && !/\$\{res\.|\[pipe:/i.test(val)) {
+          push("mls03","info",line,`<${name}> hardcodes a currency symbol in ${k}="${val}" — reference a <res> tag instead so it can vary by language.`);
+        }
+      });
+    }
+
+    if (!closingSlash) {
+      const BLOCKABLE = !(name==="row" || name==="col" || name==="choice" || name==="title" || name==="comment" || name==="res");
+      const parent = stack.length ? stack[stack.length-1] : rootFrame;
+      const cond = attrs.cond;
+      if (!BLOCKABLE) {
+        // rows/cols can't be wrapped in a <block>; rowCond/colCond shorthand covers those
+      } else if (cond !== undefined && cond !== "") {
+        if (parent._lastCond === cond) {
+          parent._condRunCount = (parent._condRunCount || 1) + 1;
+          if (parent._condRunCount === 2) {
+            push("blockCondReuse","warning", parent._condRunStart, `Sibling elements starting at line ${parent._condRunStart} repeat cond="${cond}" — wrap them in <block cond="${cond}"> instead of restating the condition on each one.`);
+          }
+        } else {
+          parent._lastCond = cond;
+          parent._condRunStart = line;
+          parent._condRunCount = 1;
+        }
+      } else {
+        parent._lastCond = undefined;
+        parent._condRunCount = 0;
+        parent._condRunStart = null;
+      }
+    }
+
+    if (closingSlash) {
+      if (stack.length===0) {
+        push("wellformed","error",line,`Found closing </${name}> with no matching opening tag.`);
+      } else {
+        const top = stack[stack.length-1];
+        if (top.name !== name) push("wellformed","error",line,`Expected </${top.name}> (opened at line ${top.line}) but found </${name}>.`);
+        stack.pop();
+        finalizeFrame(top, stack);
+      }
+    } else {
+      const isQ = QUESTION_TAGS.has(name);
+      const frame = {
+        name, line, isQuestion:isQ, valueMap:{}, colValueMap:{}, sawTitle:false, immediateText:"",
+        labelAttr:attrs.label, attrs, hasInsert:false, rowTexts:new Set(),
+        hasCols:false, missingValueRows:[], missingValueCols:[],
+        rowCondEntries:[], colCondEntries:[], totalRowCount:0, totalColCount:0,
+      };
+
+      if (isQ) {
+        if (!attrs.label) push("missingLabel","error",line,`<${name}> has no label attribute.`);
+        else checkLabel(attrs.label, line);
+
+        const isHidden = attrs.where !== undefined && attrs.where.split(",").map(s=>s.trim().toLowerCase()).includes("execute");
+        const noTranslateSet = (attrs.notranslate||"").split(",").map(s=>s.trim().toLowerCase()).filter(Boolean);
+        if (isHidden) {
+          const isPiped = attrs.label && pipedLabels.has(attrs.label.toLowerCase());
+          if (!isPiped && (attrs.translateable === undefined || attrs.translateable !== "0")) {
+            push("hid01","warning",line,`<${name} label="${attrs.label||"?"}"> has where="${attrs.where}" but is missing translateable="0" (and isn't referenced via [pipe: ...] elsewhere).`);
+          }
+          if (attrs.label && attrs.label[0] !== "h") {
+            push("hid02","warning",line,`<${name} label="${attrs.label}"> is a hidden/execute-only element — its label should start with a lowercase "h".`);
+          }
+          if (!noTranslateSet.includes("comment") || !noTranslateSet.includes("title")) {
+            push("hid03","warning",line,`<${name} label="${attrs.label||"?"}"> is hidden/execute-only and should have noTranslate="comment,title" (found: ${attrs.notranslate ? '"'+attrs.notranslate+'"' : "none"}).`);
+          }
+        } else {
+          if (!noTranslateSet.includes("comment")) {
+            push("trn01","warning",line,`<${name} label="${attrs.label||"?"}"> is a normal (visible) question and should have noTranslate="comment" so comments aren't sent for translation.`);
+          }
+          if (noTranslateSet.includes("title")) {
+            push("trn02","error",line,`<${name} label="${attrs.label||"?"}"> is a normal (visible) question but marks title as noTranslate — respondents need to see a translated title.`);
+          }
+        }
+
+        allQuestionsMeta.push({ label: attrs.label, tag: name, line, shuffle: attrs.shuffle, shuffleby: attrs.shuffleby, rowcond: attrs.rowcond, colcond: attrs.colcond });
+      }
+
+      if (name==="row" || name==="col") {
+        const owner = findEnclosingQuestion(stack);
+        if (name==="col" && owner) owner.hasCols = true;
+        if (owner) {
+          if (name==="row") {
+            owner.totalRowCount++;
+            if (attrs.cond !== undefined) owner.rowCondEntries.push({ cond: attrs.cond, line });
+          } else {
+            owner.totalColCount++;
+            if (attrs.cond !== undefined) owner.colCondEntries.push({ cond: attrs.cond, line });
+          }
+        }
+        if (attrs.value === undefined) {
+          if (owner && owner.name === "radio") {
+            if (name==="row") owner.missingValueRows.push(line);
+            else owner.missingValueCols.push(line);
+          } else {
+            push("missingValue","error",line,`<${name}> has no value attribute.`);
+          }
+        } else if (owner) {
+          const vmap = (name==="col") ? owner.colValueMap : owner.valueMap;
+          if (vmap[attrs.value]) vmap[attrs.value].push(line);
+          else vmap[attrs.value] = [line];
+        }
+      }
+      if (name==="title") {
+        const owner = findEnclosingQuestion(stack);
+        if (owner) owner.sawTitle = true;
+      }
+      if (name==="insert") {
+        const owner = findEnclosingQuestion(stack);
+        if (owner) owner.hasInsert = true;
+      }
+
+      if (selfClose) finalizeFrame(frame, stack);
+      else stack.push(frame);
+    }
+  }
+
+  stack.forEach(f => push("wellformed","error",f.line,`<${f.name}> opened at line ${f.line} is never closed.`));
+
+  labelMap.forEach((lines, label) => {
+    if (lines.length>1) push("dupLabel","error",lines[0],`Label "${label}" is used ${lines.length} times (lines ${lines.join(", ")}).`);
+  });
+
+  if (!suspendFound) push("noSuspend","info",1,"No <suspend/> checkpoint found anywhere in the script.");
+
+  // DFL-01: group questions sharing an identical hardcoded answer list, report once per group
+  {
+    const groups = new Map();
+    questionsForDFL.forEach(q => {
+      if (q.hasInsert || q.rowTexts.size === 0) return;
+      const key = [...q.rowTexts].sort().join("\u0001");
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(q);
+    });
+    groups.forEach(members => {
+      if (members.length < 2) return;
+      const names = members.map(q => `"${q.label||"?"}" (line ${q.line})`);
+      const shown = names.slice(0,4).join(", ") + (names.length>4 ? `, +${names.length-4} more` : "");
+      push("dfl01","warning", members[1].line, `${members.length} questions share the same hardcoded answer list — ${shown}. Define it once with <define> and pull it in with <insert>.`);
+    });
+  }
+
+  // Randomization consistency: a question whose rows/cols are filtered from a source question's
+  // shuffled rows/cols (rowCond="Source[row]" / colCond="Source[col]") should shuffle to match.
+  {
+    const axes = [
+      { condKey: "rowcond", regex: /([A-Za-z_]\w*)\[row\]/, shuffleToken: "rows", noun: "rows" },
+      { condKey: "colcond", regex: /([A-Za-z_]\w*)\[col\]/, shuffleToken: "cols", noun: "cols" },
+    ];
+    axes.forEach(axis => {
+      const shuffledLabels = new Set(
+        allQuestionsMeta
+          .filter(q => (q.shuffle||"").split(",").map(s=>s.trim().toLowerCase()).includes(axis.shuffleToken))
+          .map(q => q.label)
+          .filter(Boolean)
+      );
+      allQuestionsMeta.forEach(q => {
+        const condVal = q[axis.condKey];
+        if (!condVal) return;
+        const refMatch = axis.regex.exec(condVal);
+        if (!refMatch) return;
+        const sourceLabel = refMatch[1];
+        if (!shuffledLabels.has(sourceLabel)) return;
+        const ownShuffle = (q.shuffle||"").split(",").map(s=>s.trim().toLowerCase());
+        const hasMatchingShuffle = ownShuffle.includes(axis.shuffleToken);
+        const shuffleByVal = q.shuffleby;
+        if (!hasMatchingShuffle || !shuffleByVal || shuffleByVal.toLowerCase() !== sourceLabel.toLowerCase()) {
+          push("randomizationConsistency","warning", q.line, `<${q.tag} label="${q.label||"?"}"> filters its ${axis.noun} from "${sourceLabel}" (which randomizes its ${axis.noun}) but doesn't set shuffle="${axis.shuffleToken}" shuffleBy="${sourceLabel}" — its ${axis.noun} may not show in the same order the participant saw in ${sourceLabel}.`);
+        }
+      });
+    });
+  }
+
+  // exec-specific checks: CDATA escaping, debug leftovers, PY-01..PY-06
+  const execBodies = [];
+  const execRe = /<exec\b([^>]*)>([\s\S]*?)<\/exec>/gi;
+  let em;
+  while ((em = execRe.exec(rawText))) {
+    const attrStr = em[1];
+    const body = em[2];
+    const line = lineForIndex(offsets, em.index);
+    const bodyStartIdx = em.index + (em[0].length - body.length - "</exec>".length);
+
+    const whenMatch = /(?:^|\s)when\s*=\s*"([^"]*)"/i.exec(attrStr) || /(?:^|\s)when\s*=\s*'([^']*)'/i.exec(attrStr);
+    const whenAttr = whenMatch ? whenMatch[1] : undefined;
+
+    const trimmed = body.trim();
+    const isCdata = /^<!\[CDATA\[/.test(trimmed) && /\]\]>$/.test(trimmed);
+    if (!isCdata) {
+      const withoutEntities = body.replace(/&(amp|lt|gt|apos|quot|#\d+|#x[0-9a-f]+);/gi,"");
+      if (/[<>]/.test(withoutEntities) || /&/.test(withoutEntities)) {
+        push("execEscaping","error",line,`<exec> isn't wrapped in <![CDATA[ ... ]]> but its content has a "<", ">" or "&" — this can break XML parsing.`);
+      }
+    }
+    const debugRe = /\b(console\.(?:log|debug|warn|error)|debugger\b|alert\s*\()/g;
+    let dm;
+    while ((dm = debugRe.exec(body))) {
+      const dline = lineForIndex(offsets, bodyStartIdx + dm.index);
+      push("debugLeftovers","warning",dline,`Leftover debug statement "${dm[1]}" found in <exec> block.`);
+    }
+
+    // PY-01: repeated standalone "if" on the same variable
+    {
+      const ifRe = /^[ \t]*if\s+(.+?)\s*==/gm;
+      const varLines = {};
+      let pm;
+      while ((pm = ifRe.exec(body))) {
+        const v = pm[1].trim();
+        const aline = lineForIndex(offsets, bodyStartIdx + pm.index);
+        (varLines[v] = varLines[v]||[]).push(aline);
+      }
+      Object.entries(varLines).forEach(([v, ls]) => {
+        if (ls.length>=2) push("py01","warning",ls[0],`${ls.length} separate "if" statements compare "${v}" for what look like mutually exclusive outcomes — use if/elif instead (lines ${ls.join(", ")}).`);
+      });
+    }
+
+    // PY-02: long if/elif chain mapping the same variable
+    {
+      const chainRe = /^[ \t]*(el)?if\s+(.+?)\s*==/gm;
+      let cm, chainVar=null, chainStart=null, chainLen=0;
+      const chains = [];
+      while ((cm = chainRe.exec(body))) {
+        const isElif = !!cm[1];
+        const v = cm[2].trim();
+        const aline = lineForIndex(offsets, bodyStartIdx + cm.index);
+        if (!isElif) {
+          if (chainLen>0) chains.push({var:chainVar, len:chainLen, line:chainStart});
+          chainVar=v; chainStart=aline; chainLen=1;
+        } else if (v===chainVar) {
+          chainLen++;
+        } else {
+          chains.push({var:chainVar, len:chainLen, line:chainStart});
+          chainVar=v; chainStart=aline; chainLen=1;
+        }
+      }
+      if (chainLen>0) chains.push({var:chainVar, len:chainLen, line:chainStart});
+      chains.forEach(ch => {
+        if (ch.len>=4) push("py02","info",ch.line,`A chain of ${ch.len} if/elif branches maps values for "${ch.var}" — a dictionary or list lookup would be simpler.`);
+      });
+    }
+
+    // PY-03 / PY-04: loop scanning (indentation-based)
+    {
+      const bLines = body.split("\n");
+      const bOffsets = buildLineOffsets(body);
+      for (let i=0;i<bLines.length;i++){
+        const forMatch = bLines[i].match(/^([ \t]*)for\s+\w+\s+in\s+.+:\s*$/);
+        if (!forMatch) continue;
+        const indent = forMatch[1].length;
+        let j=i+1, hasBreak=false, hasIf=false;
+        const blockLines = [];
+        while (j<bLines.length) {
+          const l = bLines[j];
+          if (l.trim()==="") { j++; continue; }
+          if (leadingLen(l) <= indent) break;
+          blockLines.push(l);
+          if (/\bbreak\b/.test(l)) hasBreak = true;
+          if (/^[ \t]*if\b.*:/.test(l)) hasIf = true;
+          j++;
+        }
+        const nonBlank = blockLines;
+        const hasAppend = nonBlank.some(l => /\.append\(/.test(l));
+        const aline = lineForIndex(offsets, bodyStartIdx + bOffsets[i]);
+
+        if (hasIf && !hasBreak && !hasAppend) {
+          push("py03","info",aline,`Loop starting at line ${aline} looks for a match but has no break statement after it's found.`);
+        }
+        if (hasAppend) {
+          const onlyAppendPattern = nonBlank.length>0 && nonBlank.every(l => /\.append\(/.test(l) || /^[ \t]*if\b.*:$/.test(l));
+          if (onlyAppendPattern) {
+            push("py04","info",aline,`Loop starting at line ${aline} only builds a list with .append() — a list comprehension would be more concise.`);
+          }
+        }
+      }
+    }
+
+    // PY-06: function defined outside exec when="init"
+    {
+      const defRe = /^[ \t]*def\s+(\w+)\s*\(/gm;
+      let dfm;
+      while ((dfm = defRe.exec(body))) {
+        if (whenAttr !== "init") {
+          const aline = lineForIndex(offsets, bodyStartIdx + dfm.index);
+          push("py06","warning",aline,`Function "${dfm[1]}" is defined in an <exec> block without when="init" — move it there so it's only created once.`);
+        }
+      }
+    }
+
+    if (trimmed) execBodies.push({ line, norm: body.replace(/\b[A-Za-z_]+\d+\b/g,"§N").replace(/\s+/g," ").trim() });
+  }
+
+  // PY-05: identical logic repeated across exec blocks (variable-number-normalized)
+  {
+    const groups = {};
+    execBodies.forEach(e => { (groups[e.norm] = groups[e.norm]||[]).push(e.line); });
+    Object.values(groups).forEach(ls => {
+      if (ls.length>=2) push("py05","warning",ls[0],`The same logic appears in ${ls.length} separate <exec> blocks (lines ${ls.join(", ")}) — move it into a shared function inside an exec when="init" block.`);
+    });
+  }
+
+  // MLS-02: hardcoded text passed to error() in <exec> or <validate>
+  {
+    const msgRe = /<(exec|validate)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+    let msgm;
+    while ((msgm = msgRe.exec(rawText))) {
+      const tagName = msgm[1], body = msgm[2];
+      const bodyStart = msgm.index + (msgm[0].length - body.length - (`</${tagName}>`).length);
+      const errRe = /error\(\s*["']/g;
+      let errm;
+      while ((errm = errRe.exec(body))) {
+        const aline = lineForIndex(offsets, bodyStart + errm.index);
+        push("mls02","warning",aline,`Hardcoded text passed to error() inside <${tagName}> — use a <res> tag so the message can be translated.`);
+      }
+    }
+  }
+
+  results.forEach(r => r.snippet = snippetOf(r.line));
+  results.sort((a,b) => a.line - b.line || a.severity.localeCompare(b.severity));
+  return results;
+}
+
+// ---------- wiring ----------
+const xmlInput = document.getElementById("xmlInput");
+const xmlBackdrop = document.getElementById("xmlBackdrop");
+const runBtn = document.getElementById("runBtn");
+const uploadBtn = document.getElementById("uploadBtn");
+const fileInput = document.getElementById("fileInput");
+const sampleBtn = document.getElementById("sampleBtn");
+const resultsEl = document.getElementById("results");
+const statsBar = document.getElementById("statsBar");
+const lineHighlightEl = document.getElementById("lineHighlight");
+
+const enabled = Object.fromEntries(ACTIVE_RULES.map(r => [r.id, true]));
+let lastResults = null;
+const dismissed = new Set();
+let highlightLine = null, highlightColor = null;
+
+function renderRuleList(){
+  const targets = { client:"rulesClient", mls:"rulesMls", forsta:"rulesForsta" };
+  Object.values(targets).forEach(id => document.getElementById(id).innerHTML = "");
+  ACTIVE_RULES.forEach(r => {
+    const row = document.createElement("label");
+    row.className = "rule-row";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = !!enabled[r.id];
+    checkbox.dataset.rule = r.id;
+    const span = document.createElement("span");
+    span.textContent = r.label;
+    row.appendChild(checkbox);
+    row.appendChild(span);
+    checkbox.addEventListener("change", (e) => {
+      enabled[r.id] = e.target.checked;
+      renderResults();
+    });
+    document.getElementById(targets[r.cat]).appendChild(row);
+  });
+}
+
+function updateHighlightPosition(){
+  if (highlightLine == null) { lineHighlightEl.style.display = "none"; return; }
+  const lineHeight = 20;
+  const top = (highlightLine-1)*lineHeight - xmlInput.scrollTop;
+  if (top < -lineHeight || top > xmlInput.clientHeight) { lineHighlightEl.style.display = "none"; return; }
+  lineHighlightEl.style.top = top + "px";
+  lineHighlightEl.style.height = lineHeight + "px";
+  lineHighlightEl.style.background = highlightColor;
+  lineHighlightEl.style.display = "block";
+}
+function renderBackdrop(){
+  xmlBackdrop.innerHTML = highlightXml(xmlInput.value) + "\n";
+}
+function syncScroll(){
+  xmlBackdrop.scrollTop = xmlInput.scrollTop;
+  xmlBackdrop.scrollLeft = xmlInput.scrollLeft;
+}
+
+xmlInput.addEventListener("scroll", () => { syncScroll(); updateHighlightPosition(); });
+xmlInput.addEventListener("input", () => {
+  runBtn.disabled = !xmlInput.value.trim();
+  activeFilter = "all";
+  sortMode = "line";
+  document.getElementById("sortSelect").value = "line";
+  activeFilter = "all";
+  sortMode = "line";
+  document.getElementById("sortSelect").value = "line";
+  lastResults = null;
+  highlightLine = null;
+  updateHighlightPosition();
+  renderBackdrop();
+  renderResults();
+});
+
+function jumpToLine(lineNum, color){
+  const lines = xmlInput.value.split("\n");
+  let idx = 0;
+  for (let i=0;i<lineNum-1;i++) idx += (lines[i]?.length || 0) + 1;
+  const end = idx + (lines[lineNum-1]?.length || 0);
+  xmlInput.focus();
+  xmlInput.setSelectionRange(idx, end);
+  const lineHeight = 20;
+  xmlInput.scrollTop = Math.max(0, (lineNum-1)*lineHeight - xmlInput.clientHeight/2);
+  highlightLine = lineNum;
+  highlightColor = color;
+  updateHighlightPosition();
+}
+
+function xmlEscape(value){
+  return String(value ?? "")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&apos;");
+}
+
+/* Minimal XLSX writer.
+   XLSX is a ZIP package of XML files. This implementation writes
+   store-only ZIP entries, so it needs no external library or internet. */
+function crc32(bytes){
+  let table = crc32.table;
+  if(!table){
+    table = crc32.table = new Uint32Array(256);
+    for(let n=0;n<256;n++){
+      let c=n;
+      for(let k=0;k<8;k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      table[n]=c>>>0;
+    }
+  }
+  let c=0xFFFFFFFF;
+  for(const b of bytes) c = table[(c ^ b) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function u16(n){ return [n&255,(n>>>8)&255]; }
+function u32(n){ return [n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255]; }
+
+function concatBytes(...arrays){
+  const total = arrays.reduce((n,a)=>n+a.length,0);
+  const out = new Uint8Array(total);
+  let p=0;
+  for(const a of arrays){ out.set(a,p); p+=a.length; }
+  return out;
+}
+
+function zipStore(entries){
+  const enc = new TextEncoder();
+  const local = [], central = [];
+  let offset = 0;
+
+  for(const entry of entries){
+    const name = enc.encode(entry.name);
+    const data = typeof entry.data === "string" ? enc.encode(entry.data) : entry.data;
+    const crc = crc32(data);
+
+    const localHeader = new Uint8Array([
+      0x50,0x4B,0x03,0x04, 20,0, 0,0, 0,0, 0,0,
+      ...u32(crc), ...u32(data.length), ...u32(data.length),
+      ...u16(name.length), 0,0
+    ]);
+    local.push(localHeader, name, data);
+
+    const centralHeader = new Uint8Array([
+      0x50,0x4B,0x01,0x02, 20,0,20,0, 0,0,0,0, 0,0,0,0,
+      ...u32(crc), ...u32(data.length), ...u32(data.length),
+      ...u16(name.length), 0,0, 0,0, 0,0, 0,0, 0,0,0,0, ...u32(offset)
+    ]);
+    central.push(centralHeader, name);
+    offset += localHeader.length + name.length + data.length;
+  }
+
+  const centralSize = central.reduce((n,a)=>n+a.length,0);
+  const entryCount = entries.length;
+  const eocd = new Uint8Array([
+    0x50,0x4B,0x05,0x06, 0,0,0,0,
+    ...u16(entryCount), ...u16(entryCount),
+    ...u32(centralSize), ...u32(offset), 0,0
+  ]);
+
+  return concatBytes(...local, ...central, eocd);
+}
+
+function colName(n){
+  let s="";
+  while(n>0){ const r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=Math.floor((n-1)/26); }
+  return s;
+}
+
+function xlsxCell(value, row, col){
+  const ref = colName(col) + row;
+  if(typeof value === "number" && Number.isFinite(value)){
+    return `<c r="${ref}"><v>${value}</v></c>`;
+  }
+  return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xmlEscape(value)}</t></is></c>`;
+}
+
+function downloadExcelReport(){
+  if (!lastResults) return;
+
+  const rows = lastResults
+    .filter(r => enabled[r.rule] && !dismissed.has(r.id))
+    .sort((a,b) => a.line-b.line);
+
+  const now = new Date();
+  const stamp = now.toISOString().slice(0,19).replace(/[:T]/g,"-");
+  const headers = ["Severity","Line","Rule Group","Rule","Message","XML Snippet"];
+
+  const sheetRows = [];
+  sheetRows.push(["CodeX — Decipher XML Audit Report"]);
+  sheetRows.push(["Generated", now.toLocaleString()]);
+  sheetRows.push(["Total Issues", rows.length]);
+  sheetRows.push([]);
+  sheetRows.push(headers);
+
+  rows.forEach(r => {
+    const rule = ACTIVE_RULES.find(x => x.id===r.rule);
+    sheetRows.push([
+      SEVERITY_META[r.severity]?.label || r.severity,
+      r.line,
+      groupName(rule?.cat || "client"),
+      rule?.label || r.rule,
+      r.message || "",
+      r.snippet || ""
+    ]);
+  });
+
+  const sheetXmlRows = sheetRows.map((row, ri) => {
+    const rowNum = ri + 1;
+    const cells = row.map((v, ci) => xlsxCell(v, rowNum, ci + 1)).join("");
+    return `<row r="${rowNum}">${cells}</row>`;
+  }).join("");
+
+  const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+ xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+ <dimension ref="A1:F${Math.max(5, sheetRows.length)}"/>
+ <sheetViews><sheetView workbookViewId="0"><pane ySplit="5" topLeftCell="A6" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+ <cols>
+  <col min="1" max="1" width="13" customWidth="1"/>
+  <col min="2" max="2" width="9" customWidth="1"/>
+  <col min="3" max="3" width="22" customWidth="1"/>
+  <col min="4" max="4" width="32" customWidth="1"/>
+  <col min="5" max="5" width="70" customWidth="1"/>
+  <col min="6" max="6" width="50" customWidth="1"/>
+ </cols>
+ <sheetData>${sheetXmlRows}</sheetData>
+ <autoFilter ref="A5:F${Math.max(5, sheetRows.length)}"/>
+</worksheet>`;
+
+  const workbookXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+ xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+ <sheets><sheet name="Audit Report" sheetId="1" r:id="rId1"/></sheets>
+</workbook>`;
+
+  const relsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+ <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>`;
+
+  const rootRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+ <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`;
+
+  const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+ <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+ <Default Extension="xml" ContentType="application/xml"/>
+ <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+ <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>`;
+
+  const files = [
+    {name:"[Content_Types].xml", data:contentTypesXml},
+    {name:"_rels/.rels", data:rootRelsXml},
+    {name:"xl/workbook.xml", data:workbookXml},
+    {name:"xl/_rels/workbook.xml.rels", data:relsXml},
+    {name:"xl/worksheets/sheet1.xml", data:sheetXml}
+  ];
+
+  const xlsxBytes = zipStore(files);
+  const blob = new Blob([xlsxBytes], {
+    type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `CodeX_Audit_Report_${stamp}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+
+function groupName(cat){
+  return cat==="client" ? "Your team's rules" : cat==="mls" ? "Multi-language" : "Forsta";
+}
+function escapeText(s){
+  return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+function severityRank(sev){
+  return sev==="error" ? 0 : sev==="warning" ? 1 : 2;
+}
+
+let activeFilter = "all";
+let sortMode = "line";
+
+function updateDashboardCounts(baseResults){
+  const counts = {error:0, warning:0, info:0};
+  baseResults.forEach(r => counts[r.severity]++);
+
+  const cards = document.querySelectorAll(".summary-card .summary-number");
+  if (cards.length >= 4) {
+    cards[0].textContent = counts.error;
+    cards[1].textContent = counts.warning;
+    cards[2].textContent = counts.info;
+    cards[3].textContent = baseResults.length;
+  }
+
+  document.querySelectorAll(".filter-pill").forEach(btn => {
+    const filter = btn.dataset.filter;
+    const n = filter==="all" ? baseResults.length : counts[filter] || 0;
+    const span = btn.querySelector("span");
+    if (span) span.textContent = n;
+    btn.classList.toggle("active", filter===activeFilter);
+  });
+
+  const groupCounts = {};
+  baseResults.forEach(r => {
+    const rule = ACTIVE_RULES.find(x => x.id===r.rule);
+    const cat = rule?.cat || "client";
+    groupCounts[cat] = (groupCounts[cat] || 0) + 1;
+  });
+
+  const order = ["client","mls","forsta"];
+  document.getElementById("groupCounts").innerHTML = order.map(cat => {
+    const n = groupCounts[cat] || 0;
+    return `<div class="group-pill"><span>${groupName(cat)}</span><strong>${n}</strong></div>`;
+  }).join("");
+
+  const sub = document.getElementById("resultsSub");
+  if (!lastResults) {
+    sub.textContent = "Run the audit to see issues here";
+  } else if (baseResults.length === 0) {
+    sub.textContent = "No active issues";
+  } else {
+    sub.textContent = `${baseResults.length} issue${baseResults.length===1?"":"s"} from the enabled checks`;
+  }
+}
+
+function renderResults(){
+  const exportBtn = document.getElementById("downloadExcelBtn");
+  if (exportBtn) exportBtn.disabled = !lastResults;
+  if (!lastResults) {
+    document.getElementById("summaryCards").innerHTML = `
+      <div class="summary-card"><span class="summary-number">—</span><span class="summary-label">Errors</span></div>
+      <div class="summary-card"><span class="summary-number">—</span><span class="summary-label">Warnings</span></div>
+      <div class="summary-card"><span class="summary-number">—</span><span class="summary-label">Info</span></div>
+      <div class="summary-card total"><span class="summary-number">—</span><span class="summary-label">Total issues</span></div>`;
+    document.querySelectorAll(".filter-pill").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.filter==="all");
+      const span = btn.querySelector("span");
+      if (span) span.textContent = "0";
+    });
+    document.getElementById("groupCounts").innerHTML = `
+      <div class="group-pill"><span>Your team's rules</span><strong>—</strong></div>
+      <div class="group-pill"><span>Multi-language</span><strong>—</strong></div>
+      <div class="group-pill"><span>Forsta</span><strong>—</strong></div>`;
+    document.getElementById("resultsSub").textContent = "Run the audit to see issues here";
+    resultsEl.innerHTML = `<div class="empty">Paste or upload your XML, choose the checks you want, then run the audit.</div>`;
+    return;
+  }
+
+  const baseResults = lastResults.filter(r => enabled[r.rule] && !dismissed.has(r.id));
+  updateDashboardCounts(baseResults);
+
+  let visible = activeFilter==="all"
+    ? [...baseResults]
+    : baseResults.filter(r => r.severity===activeFilter);
+
+  if (sortMode==="severity") {
+    visible.sort((a,b) => severityRank(a.severity)-severityRank(b.severity) || a.line-b.line);
+  } else if (sortMode==="rule") {
+    visible.sort((a,b) => {
+      const ar = (ACTIVE_RULES.find(x=>x.id===a.rule)?.label || "");
+      const br = (ACTIVE_RULES.find(x=>x.id===b.rule)?.label || "");
+      return ar.localeCompare(br) || a.line-b.line;
+    });
+  } else {
+    visible.sort((a,b) => a.line-b.line || severityRank(a.severity)-severityRank(b.severity));
+  }
+
+  const dismissedCount = lastResults.filter(r => dismissed.has(r.id)).length;
+  if (dismissedCount > 0) {
+    statsBar.innerHTML = `<button class="show-dismissed" id="showDismissedBtn">${dismissedCount} skipped — show</button>`;
+    statsBar.style.display = "flex";
+    document.getElementById("showDismissedBtn").addEventListener("click", () => {
+      dismissed.clear();
+      renderResults();
+    });
+  } else {
+    statsBar.innerHTML = "";
+    statsBar.style.display = "none";
+  }
+
+  if (visible.length === 0) {
+    const message = baseResults.length === 0
+      ? "No issues found under the checks you've enabled."
+      : `No ${SEVERITY_META[activeFilter]?.label.toLowerCase() || ""} issues in the current filter.`;
+    resultsEl.innerHTML = `<div class="clear">${icon("info","var(--info)",18)}<span>${message}</span></div>`;
+    return;
+  }
+
+  const ruleLabel = id => ACTIVE_RULES.find(r => r.id===id)?.label || "";
+  resultsEl.innerHTML = visible.map(r => {
+    const meta = SEVERITY_META[r.severity];
+    const rule = ACTIVE_RULES.find(x => x.id===r.rule);
+    return `<div class="result-row" style="border-left:3px solid ${meta.color}" data-line="${r.line}" data-color="${meta.color}" data-id="${r.id}">
+      ${icon(r.severity, meta.color, 16)}
+      <div style="min-width:0;flex:1;">
+        <div class="meta">
+          <span class="mono">line ${r.line}</span>
+          <span>${escapeText(groupName(rule?.cat || "client"))}</span>
+          <span>${escapeText(ruleLabel(r.rule))}</span>
+        </div>
+        <p>${escapeText(r.message)}</p>
+        ${r.snippet ? `<code class="mono">${escapeText(r.snippet)}</code>` : ""}
+      </div>
+      <button class="dismiss-btn" data-dismiss="${r.id}" title="Skip this occurrence">Skip</button>
+    </div>`;
+  }).join("");
+
+  resultsEl.querySelectorAll(".result-row").forEach(el => {
+    el.addEventListener("click", () => jumpToLine(parseInt(el.dataset.line, 10), el.dataset.color));
+  });
+  resultsEl.querySelectorAll(".dismiss-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      dismissed.add(parseInt(btn.dataset.dismiss, 10));
+      renderResults();
+    });
+  });
+}
+
+document.querySelectorAll(".filter-pill").forEach(btn => {
+  btn.addEventListener("click", () => {
+    activeFilter = btn.dataset.filter;
+    renderResults();
+  });
+});
+
+document.getElementById("sortSelect").addEventListener("change", (e) => {
+  sortMode = e.target.value;
+  renderResults();
+});
+
+document.getElementById("downloadExcelBtn").addEventListener("click", downloadExcelReport);
+
+runBtn.addEventListener("click", () => {
+  dismissed.clear();
+  activeFilter = "all";
+  sortMode = "line";
+  document.getElementById("sortSelect").value = "line";
+  lastResults = runChecks(xmlInput.value);
+  renderResults();
+});
+
+uploadBtn.addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    xmlInput.value = String(reader.result || "");
+    runBtn.disabled = !xmlInput.value.trim();
+    activeFilter = "all";
+    sortMode = "line";
+    document.getElementById("sortSelect").value = "line";
+    lastResults = null;
+    highlightLine = null;
+    updateHighlightPosition();
+    renderBackdrop();
+    syncScroll();
+    renderResults();
+  };
+  reader.readAsText(file);
+  e.target.value = "";
+});
+
+sampleBtn.addEventListener("click", () => {
+  xmlInput.value = SAMPLE;
+  runBtn.disabled = false;
+  lastResults = null;
+  highlightLine = null;
+  updateHighlightPosition();
+  renderBackdrop();
+  syncScroll();
+  renderResults();
+});
+
+renderRuleList();
+renderBackdrop();
+</script>
+</body>
+</html>
